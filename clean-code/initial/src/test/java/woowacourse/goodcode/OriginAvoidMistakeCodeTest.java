@@ -1,7 +1,10 @@
 package woowacourse.goodcode;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import static java.util.Collections.unmodifiableList;
+import static java.util.function.Function.identity;
+import static java.util.stream.Collectors.toMap;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,12 +13,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
-
-import static java.util.Collections.unmodifiableList;
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toMap;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 /**
  * 좋은 코드의 기준은 사람마다 다르지만 대부분의 사람들이 동의하는 몇 가지 기준이 있습니다.
@@ -23,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 실수를 피하는 코드는 유지보수성을 높이고 버그를 줄이는데 도움을 줍니다.
  * 유지보수성과 확장성을 위한 실수를 방지하는 코드를 작성하는 방법을 알아봅니다.
  */
-public class AvoidMistakeCodeTest {
+public class OriginAvoidMistakeCodeTest {
     /**
      * 아래 코드는 최대 5까지만 움직이는 자동차를 구현한 코드입니다.
      * 자동차와 위치를 포장하여 응집도를 높이고 유지보수성 및 확장성을 고려한 코드입니다.
@@ -34,8 +33,8 @@ public class AvoidMistakeCodeTest {
     @DisplayName("어떻게 같은 위치 객체를 사용할 때 발생할 수 있는 실수를 방지할 수 있을까?")
     void 어떻게_같은_위치_객체를_사용할_때_발생할_수_있는_실수를_방지할_수_있을까() {
         // TODO: 같은 위치 객체를 사용할 때 발생할 수 있는 실수를 방지할 수 있는 방법을 고민 후 개선해보세요.
-        final class Position {
-            private final int value;
+        class Position {
+            private int value;
 
             Position() {
                 this(0);
@@ -45,8 +44,8 @@ public class AvoidMistakeCodeTest {
                 this.value = value;
             }
 
-            public Position increase() {
-                return new Position(value + 1);
+            public void increase() {
+                value++;
             }
 
             @Override
@@ -65,33 +64,23 @@ public class AvoidMistakeCodeTest {
 
         record Car(
                 String name,
-                Position position // 원시값
+                Position position
         ) {
-
-            public Car forward() {
-                return new Car(name, position.increase());
+            public void forward() {
+                position.increase();
             }
         }
 
         final var position = new Position();
 
-        var neoCar = new Car("네오", position);
+        final var neoCar = new Car("네오", position);
         final var brownCar = new Car("브라운", position);
 
-        long startTime = System.nanoTime();
-
-        // Note: Car 객체가 불변 객체가 되면서 위치가 이동될 때 마다 새로운 객체가 생성된다.
-        for (int i = 0; i < 10000; i++) {
-            neoCar = neoCar.forward();
-        }
-
-        long endTime = System.nanoTime();
-        long duration = endTime - startTime;
-        System.out.println("객체 duration = " + duration);
+        neoCar.forward();
 
         // Note: 네오의 자동차만 움직였기 때문에 브라운의 자동차는 움직이지 않아야 한다.
-        assertThat(neoCar.position()).isEqualTo(new Position(10000));
-        assertThat(brownCar.position()).isEqualTo(new Position(0)); // 여기도 10000이 되는 문제 존재
+        assertThat(neoCar.position()).isEqualTo(new Position(1));
+        assertThat(brownCar.position()).isEqualTo(new Position(0));
     }
 
     /**
@@ -107,26 +96,12 @@ public class AvoidMistakeCodeTest {
     void 불변_객체를_사용할_때_성능상의_이슈를_해결하는_방법은_무엇일까() {
         // TODO: 불변 객체를 사용할 때 성능상의 이슈를 해결하는 방법을 고민 후 개선해보세요.
         record Position(int value) {
-            private static final Map<Integer, Position> CACHE = new ConcurrentHashMap<>();
-
-            public static Position valueOf(final int value) {
-                return CACHE.computeIfAbsent(value, Position::new);
-            }
-
-            public static Position startingPoint() {
-                return valueOf(0);
+            Position() {
+                this(0);
             }
 
             public Position increase() {
-                return valueOf(value + 1);
-            }
-
-            public Position nonIncrease() {
-                return valueOf(value);
-            }
-
-            public int getCacheSize() {
-                return CACHE.size();
+                return new Position(value + 1);
             }
         }
 
@@ -134,51 +109,20 @@ public class AvoidMistakeCodeTest {
                 String name,
                 Position position
         ) {
-            private static final Map<String, Car> CACHE = new ConcurrentHashMap<>();
-
-            public static Car of(final String name, final Position position) {
-                return CACHE.computeIfAbsent(toKey(name, position), key -> new Car(key, position));
-            }
-
-            private static String toKey(final String name, final Position position) {
-                System.out.println("name = " + name);
-                return name + position.value();
-            }
-
             public Car forward() {
                 return new Car(name, position.increase());
             }
-
-            public Car stop() {
-                return new Car(name, position.nonIncrease());
-            }
-            
-            public int getCacheSize() {
-                return CACHE.size();
-            }
         }
 
-        final var position = Position.startingPoint();
+        final var position = new Position();
 
-        var neoCar = Car.of("네오", position);
-        var brownCar = Car.of("브라운", position);
-
-        long startTime = System.nanoTime();
+        var neoCar = new Car("네오", position);
+        final var brownCar = new Car("브라운", position);
 
         // Note: Car 객체가 불변 객체가 되면서 위치가 이동될 때 마다 새로운 객체가 생성된다.
-        for (int i = 0; i < 1000000000; i++) {
-            neoCar = neoCar.stop();
-            // neoCar = neoCar.forward(); // Exception: java.lang.OutOfMemoryError thrown from the UncaughtExceptionHandler in thread "Test worker"
-        } // TODO: 이 부분 PR 날려도 좋을 듯
+        neoCar = neoCar.forward();
 
-        System.out.println("neoCar.getCacheSize() = " + neoCar.getCacheSize());
-        System.out.println("neoCar.position.getCacheSize() = " + neoCar.position.getCacheSize());
-
-        long endTime = System.nanoTime();
-        long duration = endTime - startTime;
-        System.out.println("불변객체 duration = " + duration);
-
-        assertThat(neoCar.position()).isEqualTo(new Position(0));
+        assertThat(neoCar.position()).isEqualTo(new Position(1));
         assertThat(brownCar.position()).isEqualTo(new Position(0));
     }
 
@@ -193,36 +137,18 @@ public class AvoidMistakeCodeTest {
     void 메모리_사용량을_최소화하는_방법은_무엇일까() {
         // TODO: 메모리 사용량을 최소화하는 방법을 고민 후 개선해보세요.
         record Position(int value) {
-            private static final int CACHE_MIN = 0;
-            private static final int CACHE_MAX = 5;
-            private static final Map<Integer, Position> CACHE = IntStream.range(CACHE_MIN, CACHE_MAX + 1)
-                    .boxed()
-                    .collect(toMap(identity(), Position::new)); // TODO: 틀린 거 확인 후 PR 날리기?
+            private static final Map<Integer, Position> CACHE = new ConcurrentHashMap<>();
 
             public static Position startingPoint() {
                 return valueOf(0);
             }
 
             public static Position valueOf(final int value) {
-                // System.out.println("value = " + value);
-                if (CACHE_MIN <= value && value <= CACHE_MAX) { // 범위 내 값에 대해서만 캐시 사용
-                    // System.out.println("hihihihihih");
-                    return CACHE.get(value);
-                }
-                // System.out.println("hohohohohoh");
-                return new Position(value);
+                return CACHE.computeIfAbsent(value, Position::new);
             }
 
-            public Position increase(int value) {
-                return valueOf(value);
-            }
-
-            public Position notIncrease() {
-                return valueOf(value);
-            }
-
-            public int getCacheSize() {
-                return CACHE.size();
+            public Position increase() {
+                return valueOf(value + 1);
             }
         }
 
@@ -233,27 +159,16 @@ public class AvoidMistakeCodeTest {
             private static final Map<String, Car> CACHE = new ConcurrentHashMap<>();
 
             public static Car of(final String name, final Position position) {
-                // System.out.println("position = " + position);
                 return CACHE.computeIfAbsent(toKey(name, position), key -> new Car(key, position));
             }
 
             private static String toKey(final String name, final Position position) {
-                System.out.println("position.value() = " + position.value());
                 return name + position.value();
             }
 
-            public Car forward(int value) {
+            public Car forward() {
                 // Note: 움직일 때 마다 캐싱된 객체가 재활용된다. 하지만 캐싱된 객체가 많을수록 메모리 사용량이 증가한다.
-                return Car.of(name, position.increase(value));
-            }
-
-            public Car stop() {
-                // Note: 움직일 때 마다 캐싱된 객체가 재활용된다. 하지만 캐싱된 객체가 많을수록 메모리 사용량이 증가한다.
-                return Car.of(name, position.notIncrease());
-            }
-
-            public int getCacheSize() {
-                return CACHE.size();
+                return Car.of(name, position.increase());
             }
         }
 
@@ -262,22 +177,10 @@ public class AvoidMistakeCodeTest {
         var neoCar = Car.of("네오", position);
         var brownCar = Car.of("브라운", position);
 
-        long startTime = System.nanoTime();
+        neoCar = neoCar.forward();
 
-        // Note: Car 객체가 불변 객체가 되면서 위치가 이동될 때 마다 새로운 객체가 생성된다.
-        for (int i = 1; i < 10; i++) {
-            neoCar = neoCar.forward(3);
-        }
-        System.out.println("neoCar.getCacheSize() = " + neoCar.getCacheSize());
-        System.out.println("neoCar.position.getCacheSize() = " + neoCar.position.getCacheSize());
-
-        long endTime = System.nanoTime();
-        long duration = endTime - startTime;
-        System.out.println("정적 팩토리 메서드 duration = " + duration);;
-
-        assertThat(neoCar.position()).isEqualTo(Position.valueOf(3)); // 10000까지는 안터짐, 100000부터 터짐
+        assertThat(neoCar.position()).isEqualTo(Position.valueOf(1));
         assertThat(brownCar.position()).isEqualTo(Position.valueOf(0));
-        // Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
     }
 
     /**
